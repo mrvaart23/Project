@@ -32,7 +32,7 @@ node {
                         $class: 'GitSCM', 
                         userRemoteConfigs: [[
                             url: repoUrl, 
-                            credentialsId: env.GITLAB_CREDS_ID]],
+                            credentialsId: env.GITHUB_CREDS_ID]],
                         extensions: extensions,
                         branches: [[name: "master"]]
                     ], 
