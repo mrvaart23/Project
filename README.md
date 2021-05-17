@@ -17,5 +17,5 @@
 ## Technologies which were used in project
 ### Orchestration: Jenkins
 ### Infrastructure: VirtualBox, Vagrant
-### SCM: GitLab
+### SCM: GitHUB
 ### Notification: Slack
