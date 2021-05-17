@@ -1,0 +1,120 @@
+String releaseUpgradeVersion = params.RELEASE_UPGRADE_VERSION
+String actualVersionTag = env.ACTUAL_VERSION
+String rootVagrantFolder = env.ROOT_VAGRANT_FOLDER
+String execCommandDump = env.ROOT_DUMP_FOLDER
+String workdir = "/home/vagrant/workdir"
+
+
+String baseGitUrl = "git@gitlab.com:it-academy-project/%s.git"
+
+
+def execVagrantCommand (String command, String rootFolder = env.ROOT_VAGRANT_FOLDER) {
+    dir (rootFolder) {
+        bat """
+        ssh vagrant@192.168.50.4  "${command}"
+        """
+    }
+}
+
+def execBatCommand (String command, String rootFolder = env.ROOT_VAGRANT_FOLDER) {
+    dir (rootFolder) {
+        bat encoding: 'UTF-8', label: '', script: """@chcp 65001
+        ${command}
+        """
+    }
+}
+
+def doCheckout (String repoUrl) {
+    ArrayList<Object> extensions = []
+    extensions.add(
+        [
+            $class: 'CloneOption',
+            depth: 0,
+            honorRefspec: true,
+            noTags: false,
+            reference: '',
+            shallow: true
+        ]
+    )
+
+    retry(3) {
+        checkout (
+            scm: [
+                $class: 'GitSCM', 
+                userRemoteConfigs: [[
+                    url: repoUrl, 
+                    credentialsId: env.GITLAB_CREDS_ID]],
+                extensions: extensions,
+                branches: [[name:  "master"]]
+            ], 
+            poll: false
+        )
+    }
+} 
+
+node {
+
+    stage ("Checkout remote repo") {
+        execVagrantCommand("mkdir -p ${workdir}")
+        execVagrantCommand("cd ${workdir}; git clone https://gitlab.com/it-academy-project/wp-source.git")
+    }
+
+    if (actualVersionTag) {
+        stage ("Create backup existing application") {
+            execVagrantCommand("mkdir -p ${workdir}/backup/wordpress-one_${actualVersionTag}")
+            execVagrantCommand("cp -R /srv/www/wordpress-one/* ${workdir}/backup/wordpress-one_${actualVersionTag}/")
+            execVagrantCommand("mysqldump -uroot -proot wordpress-one > ${workdir}/backup/wordpress-one_${actualVersionTag}.sql")
+        }
+    }
+    
+    
+    Boolean needToDowngrade = false
+ 
+    stage ("Deploy '${releaseUpgradeVersion}' version (UPGRADE)") {
+        try {
+            // Clear database
+            execVagrantCommand("mysqldump -uroot -proot --add-drop-table --no-data wordpress-one | grep ^DROP | mysql -uroot -proot wordpress-one")
+
+            // Dump new version of DB (according Release Upgrade version)
+            execVagrantCommand("mysql -uroot -proot wordpress-one < ${workdir}/wp-source/db-backup/wordpress-one_${releaseUpgradeVersion}.sql")
+
+            // Update source code of WP app
+            execVagrantCommand("cp -R ${workdir}/wp-source/wordpress-one/* /srv/www/wordpress-one/")
+
+            slackSend color: '#00FF00', message: "App was successfully upgraded to '${releaseUpgradeVersion}' version."
+
+        } catch (Exception e) {
+            unstable("Unexpected error while upgrading to '${releaseUpgradeVersion}' version. Message: ${e}")
+            needToDowngrade = true
+            slackSend color: '#FF0000', message: "Unexpected error while upgrading to '${releaseUpgradeVersion}' version. Message: ${e}"
+            return
+        }
+    }
+
+    if (needToDowngrade) {
+        stage ("Deploy '${actualVersionTag}' version (DOWNGRADE)") {
+            try {
+                // Clear database
+                execVagrantCommand("mysqldump -uroot -proot --add-drop-table --no-data wordpress-one | grep ^DROP | mysql -uroot -proot wordpress-one")
+
+                // Dump last backup version of DB (according actualVersionTag)
+                execVagrantCommand("mysql -uroot -proot wordpress-one < ${workdir}/backup/wordpress-one_${actualVersionTag}.sql")
+
+                // Update last backup source code of WP app
+                execVagrantCommand("cp -R ${workdir}/backup/wordpress-one_${actualVersionTag}/* /srv/www/wordpress-one/")
+
+                slackSend color: '#FFA500', message: "App was successfully downgraded to '${actualVersionTag}' previous version."
+
+            } catch (Exception e) {
+                unstable("Unexpected error while downgrading to '${actualVersionTag}' version. Message: ${e}")
+                slackSend color: '#FF0000', message: "Unexpected error while downgrading to '${actualVersionTag}' version. Message: ${e}"
+            } finally {
+                println("Application was not upgraded to '${releaseUpgradeVersion}' version")
+            }
+        }
+    }
+
+    stage ("Clean workdir") {
+        execVagrantCommand("rm -rf ${workdir}")
+    }
+}

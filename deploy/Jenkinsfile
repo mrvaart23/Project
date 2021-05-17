@@ -1,0 +1,56 @@
+String rootVagrantFolder = env.ROOT_VAGRANT_FOLDER
+
+
+def execBatCommand (String command, String rootFolder = env.ROOT_VAGRANT_FOLDER) {
+    bat encoding: 'UTF-8', label: '', script: """@chcp 65001
+    ${command}
+    """
+}
+
+
+node {
+    
+    stage ("Checkout repos") {
+        dir (rootVagrantFolder) {
+            String repoUrl = "https://github.com/Varying-Vagrant-Vagrants/VVV.git"
+
+            ArrayList<Object> extensions = []
+            extensions.add(
+                [
+                    $class: 'CloneOption',
+                    depth: 0,
+                    honorRefspec: true,
+                    noTags: false,
+                    reference: '',
+                    shallow: true
+                ]
+            )
+
+            retry(3) {
+                checkout (
+                    scm: [
+                        $class: 'GitSCM', 
+                        userRemoteConfigs: [[
+                            url: repoUrl, 
+                            credentialsId: env.GITLAB_CREDS_ID]],
+                        extensions: extensions,
+                        branches: [[name: "master"]]
+                    ], 
+                    poll: false
+                )
+            }
+        }
+    }
+
+    stage ("Deploy application") {
+        try {
+            dir (rootVagrantFolder) {
+                execBatCommand("vagrant plugin install --local")
+                execBatCommand("vagrant up")
+            }
+        } catch (Exception e) {
+            unstable("Unexpected error while deploying application. Message: ${e}")
+        }
+    }
+
+}
