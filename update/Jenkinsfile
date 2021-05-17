@@ -103,7 +103,7 @@ node {
                 // Update last backup source code of WP app
                 execVagrantCommand("cp -R ${workdir}/backup/wordpress-one_${actualVersionTag}/* /srv/www/wordpress-one/")
 
-                slackSend color: '#FFA500', message: "App was successfully downgraded to '${actualVersionTag}' previous version."
+                slackSend color: '#FFA500', message: "App was successfully downgraded'${actualVersionTag}' previous version."
 
             } catch (Exception e) {
                 unstable("Unexpected error while downgrading to '${actualVersionTag}' version. Message: ${e}")
