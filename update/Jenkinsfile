@@ -5,7 +5,7 @@ String execCommandDump = env.ROOT_DUMP_FOLDER
 String workdir = "/home/vagrant/workdir"
 
 
-String baseGitUrl = "git@gitlab.com:it-academy-project/%s.git"
+String baseGitUrl = "git@github.com:mrvaart23/Project.git"
 
 
 def execVagrantCommand (String command, String rootFolder = env.ROOT_VAGRANT_FOLDER) {
@@ -43,7 +43,7 @@ def doCheckout (String repoUrl) {
                 $class: 'GitSCM', 
                 userRemoteConfigs: [[
                     url: repoUrl, 
-                    credentialsId: env.GITLAB_CREDS_ID]],
+                    credentialsId: env.GITHUB_CREDS_ID]],
                 extensions: extensions,
                 branches: [[name:  "master"]]
             ], 
@@ -56,7 +56,7 @@ node {
 
     stage ("Checkout remote repo") {
         execVagrantCommand("mkdir -p ${workdir}")
-        execVagrantCommand("cd ${workdir}; git clone https://gitlab.com/it-academy-project/wp-source.git")
+        execVagrantCommand("cd ${workdir}; git clone https://github.com/mrvaart23/Project.git")
     }
 
     if (actualVersionTag) {
